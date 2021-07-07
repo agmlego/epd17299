@@ -7,33 +7,6 @@ from typing import Tuple
 
 import pigpio
 
-# Main SPI pins
-SCK_PIN = 11
-SDO_PIN = 10  # Per https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/
-
-# Main hardware SPI CS pins; however we are going to use them as GPIO
-M1_CS_PIN = 8
-S1_CS_PIN = 7
-
-# Aux hardware SPI CS pins; however, we are going to use them as GPIO
-M2_CS_PIN = 17
-S2_CS_PIN = 18
-
-# GPIO for data/command lines for pairs of displays
-M1S1_DC_PIN = 13
-M2S2_DC_PIN = 22
-
-# GPIO for reset lines for pairs of displays
-M1S1_RST_PIN = 6
-M2S2_RST_PIN = 23
-
-# GPIO for individual display busy pins
-M1_BUSY_PIN = 5
-S1_BUSY_PIN = 19
-M2_BUSY_PIN = 27
-S2_BUSY_PIN = 24
-
-
 class SPIPort(enum.Enum):
     MAIN = 0
     AUXILIARY = 1
@@ -90,9 +63,9 @@ class SpiDevice:
                  channel=0,
                  bus: SPIPort = SPIPort.MAIN,
                  busmode: SPIMode = SPIMode.MODE_0,
-                 cspol: Tuple[SPICSPol, SPICSPol, SPICSPol] = 
+                 cspol: Tuple[SPICSPol, SPICSPol, SPICSPol] =
                  (SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW),
-                 hwcs: Tuple[SPIHWCS, SPIHWCS, SPIHWCS] = 
+                 hwcs: Tuple[SPIHWCS, SPIHWCS, SPIHWCS] =
                  (SPIHWCS.SPI_USE, SPIHWCS.SPI_USE, SPIHWCS.SPI_USE),
                  wiremode: SPIWireMode = SPIWireMode.FOUR_WIRE,
                  threewirebytes=0,
@@ -101,6 +74,7 @@ class SpiDevice:
                  wordsize=8,
                  ):
         self.pi = pi
+        self.speed = speed
         self.cs = channel
         if bus == SPIPort.MAIN:
             if hwcs == SPIHWCS.SPI_USE and channel not in range(2):
@@ -131,18 +105,18 @@ class SpiDevice:
             channel = 0
 
         wordsize -= 8
-        flags = wordsize << 16
-        flags |= rxendian.value << 15
-        flags |= txendian.value << 14
-        flags |= threewirebytes << 10
-        flags |= wiremode << 9
-        flags |= bus.value << 8
-        flags |= hwcs[2].value << 7 | hwcs[1].value << 6 | hwcs[0].value << 5
-        flags |= cspol[2].value << 4 | cspol[1].value << 3 | cspol[0].value << 2
-        flags |= busmode.value
+        self.flags = wordsize << 16
+        self.flags |= rxendian.value << 15
+        self.flags |= txendian.value << 14
+        self.flags |= threewirebytes << 10
+        self.flags |= wiremode << 9
+        self.flags |= bus.value << 8
+        self.flags |= hwcs[2].value << 7 | hwcs[1].value << 6 | hwcs[0].value << 5
+        self.flags |= cspol[2].value << 4 | cspol[1].value << 3 | cspol[0].value << 2
+        self.flags |= busmode.value
 
     def __enter__(self):
-        self._spi = self.pi.spi_open(channel, speed, flags)
+        self._spi = self.pi.spi_open(self.cs, self.speed, self.flags)
         return self
 
     def __exit__(self, *exc):
@@ -160,10 +134,24 @@ class Epd17299:
     """Driver for Waveshare SKU 17299 12.48" bi-color e-ink module"""
 
     class Segment:
-        """Wrapper for a display segment on module"""
+        """Wrapper for a display segment on module
 
-        def __init__(self, pi, width, height, cs, dc, rst, spi):
+        Keyword arguments:
+            pi -- reference to pigpio.pi()
+            left -- leftmost pixel in overall array
+            top -- topmost pixel in overall array
+            width -- width of this segment in pixels
+            height -- height of this segment in pixels
+            cs -- GPIO pin for CS
+            dc -- GPIO pin for data/command
+            rst -- GPIO pin for reset
+            spi -- spi connection
+        """
+
+        def __init__(self, pi, left, top, width, height, cs, dc, rst, spi):
             self.pi = pi
+            self.left = left
+            self.top = top
             self.width = width
             self.height = height
             self.cs = cs
@@ -171,9 +159,38 @@ class Epd17299:
             self.rst = rst
             self.spi = spi
 
+            self.pi.set_mode(self.cs, pigpio.OUTPUT)
+            self.pi.write(self.cs, pigpio.HIGH)
+
+
+
     def __init__(self):
         self.pi = pigpio.pi()
-        self.pi.set_mode(7, pigpio.OUTPUT)
-        self.pi.set_mode(8, pigpio.OUTPUT)
-        self.pi.write(7, pigpio.HIGH)
-        self.pi.write(8, pigpio.HIGH)
+
+        # Main SPI pins
+        SCK_PIN = 11
+        SDO_PIN = 10  # Per https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/
+
+        M1 = Segment(self.pi, 0, )
+
+        # Main hardware SPI CS pins; however we are going to use them as GPIO
+        M1_CS_PIN = 8
+        S1_CS_PIN = 7
+
+        # Aux hardware SPI CS pins; however, we are going to use them as GPIO
+        M2_CS_PIN = 17
+        S2_CS_PIN = 18
+
+        # GPIO for data/command lines for pairs of displays
+        M1S1_DC_PIN = 13
+        M2S2_DC_PIN = 22
+
+        # GPIO for reset lines for pairs of displays
+        M1S1_RST_PIN = 6
+        M2S2_RST_PIN = 23
+
+        # GPIO for individual display busy pins
+        M1_BUSY_PIN = 5
+        S1_BUSY_PIN = 19
+        M2_BUSY_PIN = 27
+        S2_BUSY_PIN = 24
