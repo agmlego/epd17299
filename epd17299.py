@@ -69,6 +69,7 @@ class spi():
 
     Keyword arguments:
         pi -- reference to pigpio.pi()
+        speed -- 32K-125M (values above 30M are unlikely to work)
         channel -- if hwcs is SPIHWCS.SPI_USE, HW CS pin 0-1 (0-2 for the auxiliary SPI), otherwise GPIO number for CS pin (default 0)
         bus -- which SPI bus to use (default SPIPort.MAIN)
         busmode -- SPIMode for clock polarity and data phase (default SPIMode.MODE_0)
