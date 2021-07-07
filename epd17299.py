@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: FAFOL
 
+import contextlib
 import enum
 from typing import Tuple
 
@@ -161,6 +162,13 @@ class Epd17299:
 
             self.pi.set_mode(self.cs, pigpio.OUTPUT)
             self.pi.write(self.cs, pigpio.HIGH)
+        
+        def __enter__(self):
+            self._dev = SpiDevice(...)
+            self._dev.__enter__()
+        
+        def __exit__(self, *exc):
+            self._dev.__exit__(*exc)
 
 
 
@@ -194,3 +202,17 @@ class Epd17299:
         S1_BUSY_PIN = 19
         M2_BUSY_PIN = 27
         S2_BUSY_PIN = 24
+
+    def __del__(self):
+        self.pi.stop()
+    
+    def __enter__(self):
+        self._context_stack = contextlib.ExitStack
+        self._context_stack.__enter__()
+        self.enter_context(S2)
+        self.enter_context(M1)
+        self.enter_context(S1)
+        self.enter_context(M2)
+
+    def __exit__(self, *exc):
+        self._context_stack.__exit__(*exc)
