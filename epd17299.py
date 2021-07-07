@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: FAFOL
 
+import contextlib
 import enum
 from typing import Tuple
 
@@ -14,10 +15,10 @@ class SPIPort(enum.Enum):
 
 
 class SPIMode(enum.Enum):
-    MODE_0 = (0, 0)
-    MODE_1 = (0, 1)
-    MODE_2 = (1, 0)
-    MODE_3 = (1, 1)
+    MODE_0 = 0
+    MODE_1 = 1
+    MODE_2 = 2
+    MODE_3 = 3
 
 
 class SPICSPol(enum.Enum):
@@ -40,7 +41,7 @@ class SPIEndian(enum.Enum):
     LSB_FIRST = 1
 
 
-class SpiDevice:
+class SPIDevice:
     """Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
 
     Keyword arguments:
@@ -147,10 +148,9 @@ class Epd17299:
             dc -- GPIO pin for data/command
             rst -- GPIO pin for reset
             busy -- GPIO pin for busy
-            spi -- spi connection
         """
 
-        def __init__(self, pi, left, top, width, height, cs, dc, rst, busy, spi):
+        def __init__(self, pi, left, top, width, height, cs, dc, rst, busy):
             self.pi = pi
             self.left = left
             self.top = top
@@ -160,10 +160,18 @@ class Epd17299:
             self.dc = dc
             self.rst = rst
             self.busy = busy
-            self.spi = spi
 
             self.pi.set_mode(self.cs, pigpio.OUTPUT)
             self.pi.write(self.cs, pigpio.HIGH)
+
+            #TODO finish init of GPIO
+
+        def __enter__(self):
+            self._dev = SPIDevice(self.pi,speed=500000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0,)
+            self._dev.__enter__()
+
+        def __exit__(self, *exc):
+            self._dev.__exit__(*exc)
 
     def __init__(self):
         self.pi = pigpio.pi()
@@ -172,11 +180,25 @@ class Epd17299:
         SCK_PIN = 11
         SDO_PIN = 10  # Per https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/
 
-        S2 = Segment(self.pi, left=0, top=0, width=648,
-                     height=492, cs=18, dc=22, rst=23, busy=24, spi=spi)
-        M1 = Segment(self.pi, left=0, top=492, width=648,
-                     height=492, cs=8, dc=13, rst=6, busy=5, spi=spi)
-        S1 = Segment(self.pi, left=648, top=0, width=656,
-                     height=492, cs=7, dc=13, rst=6, busy=19, spi=spi)
-        M2 = Segment(self.pi, left=648, top=492, width=656,
-                     height=492, cs=17, dc=22, rst=23, busy=27, spi=spi)
+        self.S2 = Epd17299.Segment(self.pi, left=0, top=0, width=648,
+                          height=492, cs=18, dc=22, rst=23, busy=24)
+        self.M1 = Epd17299.Segment(self.pi, left=0, top=492, width=648,
+                          height=492, cs=8, dc=13, rst=6, busy=5)
+        self.S1 = Epd17299.Segment(self.pi, left=648, top=0, width=656,
+                          height=492, cs=7, dc=13, rst=6, busy=19)
+        self.M2 = Epd17299.Segment(self.pi, left=648, top=492, width=656,
+                          height=492, cs=17, dc=22, rst=23, busy=27)
+
+    def __del__(self):
+        self.pi.stop()
+
+    def __enter__(self):
+        self._context_stack = contextlib.ExitStack()
+        self._context_stack.__enter__()
+        self.enter_context(self.S2)
+        self.enter_context(self.M1)
+        self.enter_context(self.S1)
+        self.enter_context(self.M2)
+
+    def __exit__(self, *exc):
+        self._context_stack.__exit__(*exc)
