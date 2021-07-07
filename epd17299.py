@@ -68,6 +68,7 @@ class spi():
     """Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
 
     Keyword arguments:
+        pi -- reference to pigpio.pi()
         channel -- if hwcs is SPIHWCS.SPI_USE, HW CS pin 0-1 (0-2 for the auxiliary SPI), otherwise GPIO number for CS pin (default 0)
         bus -- which SPI bus to use (default SPIPort.MAIN)
         busmode -- SPIMode for clock polarity and data phase (default SPIMode.MODE_0)
@@ -147,10 +148,14 @@ class epd17299():
     class Segment():
         """Wrapper for a display segment on module"""
 
-        def __init__(self, width, height, cs, dc, rst, spi):
+        def __init__(self, pi, width, height, cs, dc, rst, spi):
+            self.pi = pi
             self.width = width
             self.height = height
-            self.
+            self.cs = cs
+            self.dc = dc
+            self.rst = rst
+            self.spi = spi
 
     def __init__(self):
         self.pi = pigpio.pi()
