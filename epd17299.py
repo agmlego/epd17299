@@ -162,7 +162,15 @@ class Epd17299:
             self.busy = busy
 
             self.pi.set_mode(self.cs, pigpio.OUTPUT)
+            self.pi.set_mode(self.rst, pigpio.OUTPUT)
+            self.pi.set_mode(self.dc, pigpio.OUTPUT)
+            self.pi.set_mode(self.busy, pigpio.INPUT)
+
             self.pi.write(self.cs, pigpio.HIGH)
+            self.pi.write(self.rst, pigpio.LOW)
+            self.pi.write(self.dc, pigpio.HIGH)
+
+            
 
             #TODO finish init of GPIO
 
