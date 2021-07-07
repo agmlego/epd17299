@@ -7,6 +7,7 @@ from typing import Tuple
 
 import pigpio
 
+
 class SPIPort(enum.Enum):
     MAIN = 0
     AUXILIARY = 1
@@ -145,10 +146,11 @@ class Epd17299:
             cs -- GPIO pin for CS
             dc -- GPIO pin for data/command
             rst -- GPIO pin for reset
+            busy -- GPIO pin for busy
             spi -- spi connection
         """
 
-        def __init__(self, pi, left, top, width, height, cs, dc, rst, spi):
+        def __init__(self, pi, left, top, width, height, cs, dc, rst, busy, spi):
             self.pi = pi
             self.left = left
             self.top = top
@@ -157,12 +159,11 @@ class Epd17299:
             self.cs = cs
             self.dc = dc
             self.rst = rst
+            self.busy = busy
             self.spi = spi
 
             self.pi.set_mode(self.cs, pigpio.OUTPUT)
             self.pi.write(self.cs, pigpio.HIGH)
-
-
 
     def __init__(self):
         self.pi = pigpio.pi()
@@ -171,26 +172,11 @@ class Epd17299:
         SCK_PIN = 11
         SDO_PIN = 10  # Per https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/
 
-        M1 = Segment(self.pi, 0, )
-
-        # Main hardware SPI CS pins; however we are going to use them as GPIO
-        M1_CS_PIN = 8
-        S1_CS_PIN = 7
-
-        # Aux hardware SPI CS pins; however, we are going to use them as GPIO
-        M2_CS_PIN = 17
-        S2_CS_PIN = 18
-
-        # GPIO for data/command lines for pairs of displays
-        M1S1_DC_PIN = 13
-        M2S2_DC_PIN = 22
-
-        # GPIO for reset lines for pairs of displays
-        M1S1_RST_PIN = 6
-        M2S2_RST_PIN = 23
-
-        # GPIO for individual display busy pins
-        M1_BUSY_PIN = 5
-        S1_BUSY_PIN = 19
-        M2_BUSY_PIN = 27
-        S2_BUSY_PIN = 24
+        S2 = Segment(self.pi, left=0, top=0, width=648,
+                     height=492, cs=18, dc=22, rst=23, busy=24, spi=spi)
+        M1 = Segment(self.pi, left=0, top=492, width=648,
+                     height=492, cs=8, dc=13, rst=6, busy=5, spi=spi)
+        S1 = Segment(self.pi, left=648, top=0, width=656,
+                     height=492, cs=7, dc=13, rst=6, busy=19, spi=spi)
+        M2 = Segment(self.pi, left=648, top=492, width=656,
+                     height=492, cs=17, dc=22, rst=23, busy=27, spi=spi)
