@@ -167,7 +167,7 @@ class Epd17299:
             #TODO finish init of GPIO
 
         def __enter__(self):
-            self._dev = SPIDevice(self.pi,speed=500000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0,)
+            self._dev = SPIDevice(self.pi,speed=100000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0)
             self._dev.__enter__()
 
         def __exit__(self, *exc):
