@@ -2,8 +2,10 @@
 # -*- coding: utf-8 -*-
 # SPDX-License-Identifier: FAFOL
 
-import pigpio
 import enum
+from typing import Tuple
+
+import pigpio
 
 # Main SPI pins
 SCK_PIN = 11
@@ -64,7 +66,7 @@ class SPIEndian(enum.Enum):
     LSB_FIRST = 1
 
 
-class spi():
+class SpiDevice:
     """Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
 
     Keyword arguments:
@@ -80,18 +82,22 @@ class spi():
         wordsize -- number of bits to make a word, 8-40, auxiliary SPI only (default 8)
     """
 
+    _spi = None
+
     def __init__(self, pi, speed,
                  channel=0,
-                 bus=SPIPort.MAIN,
-                 busmode=SPIMode.MODE_0,
-                 cspol=(SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW,
-                        SPICSPol.ACTIVE_LOW),
-                 hwcs=(SPIHWCS.SPI_USE, SPIHWCS.SPI_USE, SPIHWCS.SPI_USE),
-                 wiremode=SPIWireMode.FOUR_WIRE,
+                 bus: SPIPort = SPIPort.MAIN,
+                 busmode: SPIMode = SPIMode.MODE_0,
+                 cspol: Tuple[SPICSPol, SPICSPol, SPICSPol] = 
+                 (SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW),
+                 hwcs: Tuple[SPIHWCS, SPIHWCS, SPIHWCS] = 
+                 (SPIHWCS.SPI_USE, SPIHWCS.SPI_USE, SPIHWCS.SPI_USE),
+                 wiremode: SPIWireMode = SPIWireMode.FOUR_WIRE,
                  threewirebytes=0,
-                 txendian=SPIEndian.MSB_FIRST,
-                 rxendian=SPIEndian.MSB_FIRST,
-                 wordsize=8):
+                 txendian: SPIEndian = SPIEndian.MSB_FIRST,
+                 rxendian: SPIEndian = SPIEndian.MSB_FIRST,
+                 wordsize=8,
+                 ):
         self.pi = pi
         self.cs = channel
         if bus == SPIPort.MAIN:
@@ -132,7 +138,14 @@ class spi():
         flags |= hwcs[2].value << 7 | hwcs[1].value << 6 | hwcs[0].value << 5
         flags |= cspol[2].value << 4 | cspol[1].value << 3 | cspol[0].value << 2
         flags |= busmode.value
+
+    def __enter__(self):
         self._spi = self.pi.spi_open(channel, speed, flags)
+        return self
+
+    def __exit__(self, *exc):
+        self.pi.spi_close(self._spi)
+        self._spi = None
 
     def write(self, data):
         self.pi.spi_write(self._spi, data)
@@ -141,10 +154,10 @@ class spi():
         return self.pi.spi_read(self._spi, count)
 
 
-class epd17299():
+class Epd17299:
     """Driver for Waveshare SKU 17299 12.48" bi-color e-ink module"""
 
-    class Segment():
+    class Segment:
         """Wrapper for a display segment on module"""
 
         def __init__(self, width, height, cs, dc, rst, spi):
