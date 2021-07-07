@@ -21,14 +21,9 @@ class SPIMode(enum.Enum):
     MODE_3 = 3
 
 
-class SPICSPol(enum.Enum):
+class PinPolarity(enum.Enum):
     ACTIVE_LOW = 0
     ACTIVE_HIGH = 1
-
-
-class SPIHWCS(enum.Enum):
-    SPI_USE = 0
-    GPIO_USE = 1
 
 
 class SPIWireMode(enum.Enum):
@@ -41,84 +36,69 @@ class SPIEndian(enum.Enum):
     LSB_FIRST = 1
 
 
+def set_GPIO_active(pi, pin, polarity: PinPolarity = PinPolarity.ACTIVE_LOW):
+    """Set a pin to the ACTIVE state.
+
+    Keyword arguments:
+        pi -- reference to pigpio.pi()
+        pin -- GPIO pin to set
+        polarity -- which polarity pin is ACTIVE in (default PinPolarity.ACTIVE_LOW)
+    """
+    if polarity == PinPolarity.ACTIVE_LOW:
+        pi.write(pin, pigpio.LOW)
+    else:
+        pi.write(pin, pigpio.HIGH)
+
+
+def clear_GPIO_idle(pi, pin, polarity: PinPolarity = PinPolarity.ACTIVE_LOW):
+    """Clear a pin to the IDLE state.
+
+    Keyword arguments:
+        pi -- reference to pigpio.pi()
+        pin -- GPIO pin to set
+        polarity -- which polarity pin is ACTIVE in (default PinPolarity.ACTIVE_LOW)
+    """
+    if polarity == PinPolarity.ACTIVE_LOW:
+        pi.write(pin, pigpio.HIGH)
+    else:
+        pi.write(pin, pigpio.LOW)
+
+
 class SPIBus:
     """Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
 
     Keyword arguments:
         pi -- reference to pigpio.pi()
         speed -- 32K-125M (values above 30M are unlikely to work)
-        channel -- if hwcs is SPIHWCS.SPI_USE, HW CS pin 0-1 (0-2 for the auxiliary SPI), otherwise GPIO number for CS pin (default 0)
         bus -- which SPI bus to use (default SPIPort.MAIN)
         busmode -- SPIMode for clock polarity and data phase (default SPIMode.MODE_0)
-        cspol -- three-tuple of CS polarity (default (SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW))
-        hwcs -- three-tuple of whether hardware CS pins are for SPI use or GPIO use (default (SPIHWCS.SPI_USE, SPIHWCS.SPI_USE, SPIHWCS.SPI_USE))
-        wiremode -- Whether peripheral is three-wire or not, main SPI only (default SPIWireMode.FOUR_WIRE)
-        threewirebytes -- if wiremode is SPIWireMode.THREE_WIRE, how many bytes to tx before switching to rx, main SPI only, ignored if not SPIWireMode.THREE_WIRE (default 0)
-        txendian -- Whether MSB or LSB should be transmitted first, auxiliary SPI only (default SPIEndian.MSB_FIRST)
-        rxendian -- Whether MSB or LSB should be received first, auxiliary SPI only (default SPIEndian.MSB_FIRST)
-        wordsize -- number of bits to make a word, 8-40, auxiliary SPI only (default 8)
     """
 
     _spi = None
 
     def __init__(self, pi, speed,
-                 channel=0,
                  bus: SPIPort = SPIPort.MAIN,
-                 busmode: SPIMode = SPIMode.MODE_0,
-                 cspol: Tuple[SPICSPol, SPICSPol, SPICSPol] =
-                 (SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW, SPICSPol.ACTIVE_LOW),
-                 hwcs: Tuple[SPIHWCS, SPIHWCS, SPIHWCS] =
-                 (SPIHWCS.SPI_USE, SPIHWCS.SPI_USE, SPIHWCS.SPI_USE),
-                 wiremode: SPIWireMode = SPIWireMode.FOUR_WIRE,
-                 threewirebytes=0,
-                 txendian: SPIEndian = SPIEndian.MSB_FIRST,
-                 rxendian: SPIEndian = SPIEndian.MSB_FIRST,
-                 wordsize=8,
+                 busmode: SPIMode = SPIMode.MODE_0
                  ):
         self.pi = pi
         self.speed = speed
-        self.cs = channel
-        if bus == SPIPort.MAIN:
-            if hwcs == SPIHWCS.SPI_USE and channel not in range(2):
-                raise ValueError(
-                    f'Channel on main SPI bus with HW CS must be [0-1], not {channel}')
-            if wiremode == SPIWireMode.THREE_WIRE and threewirebytes not in range(16):
-                raise ValueError(
-                    f'Three-wire bytes must be [0-15], not {threewirebytes}')
-            if wiremode == SPIWireMode.FOUR_WIRE:
-                threewirebytes = 0
-            txendian = SPIEndian.MSB_FIRST
-            rxendian = SPIEndian.MSB_FIRST
-            wordsize = 8
-        else:
-            if hwcs == SPIHWCS.SPI_USE and channel not in range(3):
-                raise ValueError(
-                    f'Channel on auxiliary SPI bus with HW CS must be [0-2], not {channel}')
-            if busmode == SPIMode.MODE_1 or busmode == SPIMode.MODE_3:
-                raise ValueError(
-                    f'Modes 1 and 3 do not work on auxiliary SPI bus: {busmode}')
-            if wordsize not in range(8, 41):
-                raise ValueError(
-                    f'Word size must be in [8-40], not {wordsize}')
-            wiremode = SPIWireMode.FOUR_WIRE
-            threewirebytes = 0
+        hwcs = 0b111            # disable all three hardware CS#
+        cspol = 0b000           # all three polarities are irrelevant
+        threewirebytes = 0b0000
+        wordsize = 0b000000
 
-        if hwcs == SPIHWCS.GPIO_USE:
-            channel = 0
-
-        wordsize -= 8
         self.flags = wordsize << 16
-        self.flags |= rxendian.value << 15
-        self.flags |= txendian.value << 14
+        self.flags |= SPIEndian.MSB_FIRST.value << 15
+        self.flags |= SPIEndian.MSB_FIRST.value << 14
         self.flags |= threewirebytes << 10
-        self.flags |= wiremode << 9
+        self.flags |= SPIWireMode.FOUR_WIRE.value << 9
         self.flags |= bus.value << 8
-        self.flags |= hwcs[2].value << 7 | hwcs[1].value << 6 | hwcs[0].value << 5
-        self.flags |= cspol[2].value << 4 | cspol[1].value << 3 | cspol[0].value << 2
+        self.flags |= hwcs << 5
+        self.flags |= cspol << 2
         self.flags |= busmode.value
 
     def __enter__(self):
-        self._spi = self.pi.spi_open(self.cs, self.speed, self.flags)
+        self._spi = self.pi.spi_open(0, self.speed, self.flags)
         return self
 
     def __exit__(self, *exc):
@@ -126,7 +106,7 @@ class SPIBus:
         self._spi = None
 
     @contextlib.contextmanager
-    def transaction(self, idk_something):
+    def transaction(self, cs=0, cspol: PinPolarity = PinPolarity.ACTIVE_LOW, dc=0, dcpol: PinPolarity = PinPolarity.ACTIVE_LOW):
         """
         Construct an SPI transaction to actually talk to a device
 
@@ -136,20 +116,24 @@ class SPIBus:
         ...     t.write(b"foobar")
         ...     data = t.read(42)
         """
-        # TODO: Set CS
-        yield SPITransaction(self._spi)
-        # TODO: Clear CS
+        set_GPIO_active(self.pi, cs, cspol)
+        yield SPITransaction(self._spi, dc, dcpol)
+        clear_GPIO_idle(self.pi, cs, cspol)
 
 
 class SPITransaction:
-    def __init__(self, handle):
-        self._spi = handle
+    def __init__(self, spi, dc, dcpol):
+        self._spi = spi
+        self.dc = dc
+        self.dcpol = dcpol
 
-    def write(self, data):
+    def write(self, data, command=False):
+        if command:
+            set_GPIO_active(self.pi, self.dc, self.dcpol)
+        else:
+            clear_GPIO_idle(self.pi, self.dc, self.dcpol)
         self.pi.spi_write(self._spi, data)
-
-    def read(self, count):
-        return self.pi.spi_read(self._spi, count)
+        clear_GPIO_idle(self.pi, self.dc, self.dcpol)
 
 
 class Epd17299:
@@ -186,16 +170,15 @@ class Epd17299:
             self.pi.set_mode(self.dc, pigpio.OUTPUT)
             self.pi.set_mode(self.busy, pigpio.INPUT)
 
-            self.pi.write(self.cs, pigpio.HIGH)
-            self.pi.write(self.rst, pigpio.LOW)
-            self.pi.write(self.dc, pigpio.HIGH)
+            clear_GPIO_idle(self.pi, self.cs)
+            set_GPIO_active(self.pi, self.rst)
+            clear_GPIO_idle(self.pi, self.dc)
 
-            
-
-            #TODO finish init of GPIO
+            # TODO finish init of GPIO and module
 
         def __enter__(self):
-            self._dev = SPIBus(self.pi,speed=100000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0)
+            self._dev = SPIBus(self.pi, speed=100000,
+                               bus=SPIPort.MAIN, busmode=SPIMode.MODE_0)
             self._dev.__enter__()
 
         def __exit__(self, *exc):
@@ -209,13 +192,13 @@ class Epd17299:
         SDO_PIN = 10  # Per https://www.oshwa.org/a-resolution-to-redefine-spi-signal-names/
 
         self.S2 = Epd17299.Segment(self.pi, left=0, top=0, width=648,
-                          height=492, cs=18, dc=22, rst=23, busy=24)
+                                   height=492, cs=18, dc=22, rst=23, busy=24)
         self.M1 = Epd17299.Segment(self.pi, left=0, top=492, width=648,
-                          height=492, cs=8, dc=13, rst=6, busy=5)
+                                   height=492, cs=8, dc=13, rst=6, busy=5)
         self.S1 = Epd17299.Segment(self.pi, left=648, top=0, width=656,
-                          height=492, cs=7, dc=13, rst=6, busy=19)
+                                   height=492, cs=7, dc=13, rst=6, busy=19)
         self.M2 = Epd17299.Segment(self.pi, left=648, top=492, width=656,
-                          height=492, cs=17, dc=22, rst=23, busy=27)
+                                   height=492, cs=17, dc=22, rst=23, busy=27)
 
     def __del__(self):
         self.pi.stop()
