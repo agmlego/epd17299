@@ -41,7 +41,7 @@ class SPIEndian(enum.Enum):
     LSB_FIRST = 1
 
 
-class SPIDevice:
+class SPIBus:
     """Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
 
     Keyword arguments:
@@ -125,6 +125,26 @@ class SPIDevice:
         self.pi.spi_close(self._spi)
         self._spi = None
 
+    @contextlib.contextmanager
+    def transaction(self, idk_something):
+        """
+        Construct an SPI transaction to actually talk to a device
+
+        Usage:
+
+        >>> with spi_bus.transaction(...) as t:
+        ...     t.write(b"foobar")
+        ...     data = t.read(42)
+        """
+        # TODO: Set CS
+        yield SPITransaction(self._spi)
+        # TODO: Clear CS
+
+
+class SPITransaction:
+    def __init__(self, handle):
+        self._spi = handle
+
     def write(self, data):
         self.pi.spi_write(self._spi, data)
 
@@ -167,7 +187,7 @@ class Epd17299:
             #TODO finish init of GPIO
 
         def __enter__(self):
-            self._dev = SPIDevice(self.pi,speed=100000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0)
+            self._dev = SPIBus(self.pi,speed=100000,channel=0,bus=SPIPort.MAIN,busmode=SPIMode.MODE_0)
             self._dev.__enter__()
 
         def __exit__(self, *exc):
