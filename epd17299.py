@@ -137,6 +137,9 @@ class spi():
     def write(self, data):
         self.pi.spi_write(self._spi, data)
 
+    def read(self, count):
+        return self.pi.spi_read(self._spi, count)
+
 
 class epd17299():
     """Driver for Waveshare SKU 17299 12.48" bi-color e-ink module"""
