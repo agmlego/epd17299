@@ -10,6 +10,7 @@ import time
 from typing import Sequence
 
 import pigpio
+from PIL import Image
 
 logger = logging.getLogger(__name__)
 
@@ -189,11 +190,12 @@ class SPITransaction:
             set_GPIO_active(self.pi, self.dc, self.dcpol)
         else:
             clear_GPIO_idle(self.pi, self.dc, self.dcpol)
-        if isinstance(data,Sequence):
+        if isinstance(data, Sequence):
             data = bytes(data)
-        elif isinstance(data,int):
+        elif isinstance(data, int):
             data = bytes((data,))
-        logger.debug(f'Writing {("DATA","COMMAND")[command]}: <{", ".join([f"0x{byte:02X}" for byte in data])}')
+        logger.debug(
+            f'Writing {("DATA","COMMAND")[command]}: <{", ".join([f"0x{byte:02X}" for byte in data])}')
         self.pi.spi_write(self._spi, data)
         clear_GPIO_idle(self.pi, self.dc, self.dcpol)
 
@@ -451,13 +453,15 @@ class Epd17299:
                     if self.pi.read(self.busy) == 0:
                         break
                     else:
-                        continue  # TODO: make a nicer wait instead of spinlock; pigpio.wait_fot_edge(), maybe
+                        continue  # TODO: make a nicer wait instead of spinlock; pigpio.wait_for_edge(), maybe
             logger.debug(f'{self.name} no longer busy!')
 
-        def turn_on_display(self):
-            """Turn the display on"""
+        def turn_on(self):
+            """Turn the segment on"""
             with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
-                tx.write(0x04, command=True)
+                if self.name == Epd17299.SegmentName.M1 or\
+                        self.name == Epd17299.SegmentName.M2:
+                    tx.write(0x04, command=True)
                 time.sleep(0.3)  # TODO: why do we need this delay?
                 tx.write(0x12, command=True)
             self.wait_on_busy()
@@ -475,6 +479,30 @@ class Epd17299:
                 self.pi.write(self.dc, pigpio.LOW)
                 self.pi.write(self.cs, pigpio.HIGH)
             logger.debug(f'Set {self.name} sleep')
+
+        def clear(self):
+            """Clear segment"""
+            with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
+                tx.write(0x10, command=True)
+                tx.write(b'\xFF'*(self.width*self.height))
+
+                tx.write(0x13, command=True)
+                tx.write(b'\x00'*(self.width*self.height))
+            logger.debug(f'Cleared {self.name}')
+
+        def display(self,image: Image):
+
+            # use the RED channel as the red image
+            #  but convert it to 1-bit as the display draws "black" on white
+            #  and rotate it to match display orientation
+            redimage = self.canvas.getchannel(
+                channel='R').convert(mode='1', dither=Image.NONE).rotate(180)
+
+            # use the BLUE channel as the black image
+            #  but convert it to 1-bit as the display draws "black" on white
+            #  and rotate it to match display orientation
+            blackimage = self.canvas.getchannel(
+                channel='B').convert(mode='1', dither=Image.NONE).rotate(180)
 
     def __init__(self):
         self.pi = pigpio.pi()
@@ -498,10 +526,43 @@ class Epd17299:
     def __enter__(self):
         self._context_stack = contextlib.ExitStack()
         self._context_stack.__enter__()
-        self.enter_context(self.S2)
-        self.enter_context(self.M1)
-        self.enter_context(self.S1)
-        self.enter_context(self.M2)
+        self._context_stack.enter_context(self.S2)
+        self._context_stack.enter_context(self.M1)
+        self._context_stack.enter_context(self.S1)
+        self._context_stack.enter_context(self.M2)
 
     def __exit__(self, *exc):
         self._context_stack.__exit__(*exc)
+
+    def clear(self):
+        """Clear the display"""
+
+        logger.debug('Clearing display...')
+        self.M1.clear()
+        self.M2.clear()
+        self.S1.clear()
+        self.S2.clear()
+        self.turn_on_display()
+        logger.debug('Display cleared')
+
+    def sleep(self):
+        """Sleep the display"""
+
+        logger.debug('Sleeping display...')
+        self.M1.sleep()
+        self.M2.sleep()
+        self.S1.sleep()
+        self.S2.sleep()
+        logger.debug('Display is sleeping')
+
+    def turn_on_display(self):
+        """Turn on the display"""
+
+        logger.debug('Turning on display...')
+        self.M1.turn_on()
+        self.M2.turn_on()
+        self.S1.turn_on()
+        self.S2.turn_on()
+        logger.debug('Display is on')
+
+    def display(self,):
