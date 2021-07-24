@@ -80,6 +80,12 @@ def clear_GPIO_idle(pi, pin, polarity: PinPolarity = PinPolarity.ACTIVE_LOW):
         pi.write(pin, pigpio.LOW)
 
 
+def chunks(lst, n):
+    """Yield successive n-sized chunks from lst."""
+    for i in range(0, len(lst), n):
+        yield lst[i:i + n]
+
+
 class SPIBus:
     """
     Wrapper for a SPI bus connection, using hardware SDO/SCK but software CS#
@@ -162,6 +168,8 @@ class SPIBus:
 class SPITransaction:
     """Wrapper for a SPI transaction."""
 
+    CHUNK_SIZE = 600 #(1<<16)-1
+
     def __init__(self, pi, spi, dc, dcpol):
         """Create a new SPITransaction.
 
@@ -194,10 +202,27 @@ class SPITransaction:
             data = bytes(data)
         elif isinstance(data, int):
             data = bytes((data,))
-        logger.debug(
-            f'Writing {("DATA","COMMAND")[command]}: <{", ".join([f"0x{byte:02X}" for byte in data])}')
-        self.pi.spi_write(self._spi, data)
+        if len(data) > SPITransaction.CHUNK_SIZE:
+            logger.debug(
+                f'Large packet! {len(data)} > {SPITransaction.CHUNK_SIZE}')
+            for chunk in chunks(data, SPITransaction.CHUNK_SIZE):
+                self._write(chunk)
+        else:
+            self._write(data)
+
         clear_GPIO_idle(self.pi, self.dc, self.dcpol)
+
+    def _write(self, data, command=False):
+        """
+        Write data to the bus
+
+        Args:
+            data (bytes): the data to write
+            command (bool, optional): Flag indicating command (True) or data (False). Defaults to False.
+        """
+        logger.log(
+            0, f'Writing {("DATA","COMMAND")[command]}: <{", ".join([f"0x{byte:02X}" for byte in data])}>')
+        self.pi.spi_write(self._spi, data)
 
     def read(self):
         """Read data from the bus"""
@@ -397,7 +422,7 @@ class Epd17299:
                 self.send_lut()
 
         def __enter__(self):
-            self._dev = SPIBus(self.pi, speed=100000,
+            self._dev = SPIBus(self.pi, speed=1000000,
                                bus=SPIPort.MAIN, busmode=SPIMode.MODE_0)
             self._dev.__enter__()
             self._init_display()
@@ -454,7 +479,7 @@ class Epd17299:
                     if self.pi.read(self.busy) == 0:
                         break
                     else:
-                        continue  # TODO: make a nicer wait instead of spinlock; pigpio.wait_for_edge(), maybe
+                        time.sleep(0.01)  # TODO: make a nicer wait instead of spinlock; pigpio.wait_for_edge(), maybe
             logger.debug(f'{self.name} no longer busy!')
 
         def turn_on(self):
@@ -483,6 +508,7 @@ class Epd17299:
 
         def clear(self):
             """Clear segment"""
+            logger.debug(f'Clearing {self.name}...')
             with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
                 tx.write(0x10, command=True)
                 tx.write(b'\xFF'*(self.width*self.height))
@@ -491,7 +517,7 @@ class Epd17299:
                 tx.write(b'\x00'*(self.width*self.height))
             logger.debug(f'Cleared {self.name}')
 
-        def display(self,image: Image):
+        def display(self, image: Image):
 
             # use the RED channel as the red image
             #  but convert it to 1-bit as the display draws "black" on white
