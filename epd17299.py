@@ -408,11 +408,11 @@ class Epd17299:
         def reset(self):
             """Reset segment"""
             # TODO: use a nicer pulse than delays; pigpio.wave*(), maybe
-            self.pi.write(self.reset, pigpio.HIGH)
+            self.pi.write(self.rst, pigpio.HIGH)
             time.sleep(0.2)
-            self.pi.write(self.reset, pigpio.LOW)
+            self.pi.write(self.rst, pigpio.LOW)
             time.sleep(0.01)
-            self.pi.write(self.reset, pigpio.HIGH)
+            self.pi.write(self.rst, pigpio.HIGH)
             time.sleep(0.2)
             logger.debug(f'Reset {self.name}')
 
