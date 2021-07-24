@@ -168,7 +168,7 @@ class SPIBus:
 class SPITransaction:
     """Wrapper for a SPI transaction."""
 
-    CHUNK_SIZE = 4096 #(1<<16)-1
+    CHUNK_SIZE = 4096  # (1<<16)-1
 
     def __init__(self, pi, spi, dc, dcpol):
         """Create a new SPITransaction.
@@ -198,6 +198,7 @@ class SPITransaction:
             set_GPIO_active(self.pi, self.dc, self.dcpol)
         else:
             clear_GPIO_idle(self.pi, self.dc, self.dcpol)
+
         if isinstance(data, Sequence):
             data = bytes(data)
         elif isinstance(data, int):
@@ -206,9 +207,9 @@ class SPITransaction:
             logger.debug(
                 f'Large packet! {len(data)} > {SPITransaction.CHUNK_SIZE}')
             for chunk in chunks(data, SPITransaction.CHUNK_SIZE):
-                self._write(chunk)
+                self._write(chunk, command)
         else:
-            self._write(data)
+            self._write(data, command)
 
         clear_GPIO_idle(self.pi, self.dc, self.dcpol)
 
@@ -479,7 +480,8 @@ class Epd17299:
                     if self.pi.read(self.busy) == 0:
                         break
                     else:
-                        time.sleep(0.01)  # TODO: make a nicer wait instead of spinlock; pigpio.wait_for_edge(), maybe
+                        # TODO: make a nicer wait instead of spinlock; pigpio.wait_for_edge(), maybe
+                        time.sleep(0.1)
             logger.debug(f'{self.name} no longer busy!')
 
         def turn_on(self):
@@ -511,10 +513,14 @@ class Epd17299:
             logger.debug(f'Clearing {self.name}...')
             with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
                 tx.write(0x10, command=True)
-                tx.write(b'\xFF'*(self.width*self.height))
+                for row in range(self.height):
+                    tx.write(b'\xFF'*(self.width))
 
                 tx.write(0x13, command=True)
-                tx.write(b'\x00'*(self.width*self.height))
+                for row in range(self.height):
+                    tx.write(b'\x00'*(self.width))
+
+                tx.write(0x11, command=True)
             logger.debug(f'Cleared {self.name}')
 
         def display(self, image: Image):
