@@ -440,6 +440,25 @@ class Epd17299:
                         break
                     else:
                         continue  # TODO: make a nicer wait instead of spinlock; pigpio.wait_fot_edge(), maybe
+        def turn_on_display(self):
+            """Turn the display on"""
+            with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
+                tx.write(0x04, command=True)
+                time.sleep(0.3)  # TODO: why do we need this delay?
+                tx.write(0x12, command=True)
+            self.wait_on_busy()
+
+        def sleep(self):
+            """Sleep the display"""
+            with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
+                tx.write(0x02, command=True)
+                time.sleep(0.3)  # TODO: why do we need this delay?
+                tx.write(0x07, command=True)
+                tx.write(0xA5)
+                time.sleep(0.3)  # TODO: why do we need this delay?
+                self.pi.write(self.reset, pigpio.LOW)
+                self.pi.write(self.dc, pigpio.LOW)
+                self.pi.write(self.cs, pigpio.HIGH)
 
     def __init__(self):
         self.pi = pigpio.pi()
