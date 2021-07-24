@@ -4,10 +4,14 @@
 
 import contextlib
 import enum
-import time
+import logging
 import struct
+import time
+from typing import Sequence
 
 import pigpio
+
+logger = logging.getLogger(__name__)
 
 
 class SPIPort(enum.Enum):
@@ -185,6 +189,11 @@ class SPITransaction:
             set_GPIO_active(self.pi, self.dc, self.dcpol)
         else:
             clear_GPIO_idle(self.pi, self.dc, self.dcpol)
+        if isinstance(data,Sequence):
+            data = bytes(data)
+        elif isinstance(data,int):
+            data = bytes((data,))
+        logger.debug(f'Writing {("DATA","COMMAND")[command]}: <{", ".join([f"0x{byte:02X}" for byte in data])}')
         self.pi.spi_write(self._spi, data)
         clear_GPIO_idle(self.pi, self.dc, self.dcpol)
 
@@ -403,6 +412,7 @@ class Epd17299:
             time.sleep(0.01)
             self.pi.write(self.reset, pigpio.HIGH)
             time.sleep(0.2)
+            logger.debug(f'Reset {self.name}')
 
         def send_lut(self):
             """Send lookup tables to segment"""
@@ -430,9 +440,11 @@ class Epd17299:
                 # bb=b
                 tx.write(0x25, command=True)
                 tx.write(self._lut_ww1)
+            logger.debug(f'Sent LUT to {self.name}')
 
         def wait_on_busy(self):
             """Wait for the segment not to be busy"""
+            logger.debug(f'Waiting for {self.name} not busy...')
             while True:
                 with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
                     tx.write(0x71, command=True)
@@ -440,6 +452,8 @@ class Epd17299:
                         break
                     else:
                         continue  # TODO: make a nicer wait instead of spinlock; pigpio.wait_fot_edge(), maybe
+            logger.debug(f'{self.name} no longer busy!')
+
         def turn_on_display(self):
             """Turn the display on"""
             with self._dev.transaction(cs=self.cs, dc=self.dc) as tx:
@@ -447,6 +461,7 @@ class Epd17299:
                 time.sleep(0.3)  # TODO: why do we need this delay?
                 tx.write(0x12, command=True)
             self.wait_on_busy()
+            logger.debug(f'Turned on {self.name}')
 
         def sleep(self):
             """Sleep the display"""
@@ -459,6 +474,7 @@ class Epd17299:
                 self.pi.write(self.reset, pigpio.LOW)
                 self.pi.write(self.dc, pigpio.LOW)
                 self.pi.write(self.cs, pigpio.HIGH)
+            logger.debug(f'Set {self.name} sleep')
 
     def __init__(self):
         self.pi = pigpio.pi()
