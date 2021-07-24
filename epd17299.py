@@ -401,6 +401,7 @@ class Epd17299:
                                bus=SPIPort.MAIN, busmode=SPIMode.MODE_0)
             self._dev.__enter__()
             self._init_display()
+            return self
 
         def __exit__(self, *exc):
             self._dev.__exit__(*exc)
@@ -530,6 +531,7 @@ class Epd17299:
         self._context_stack.enter_context(self.M1)
         self._context_stack.enter_context(self.S1)
         self._context_stack.enter_context(self.M2)
+        return self
 
     def __exit__(self, *exc):
         self._context_stack.__exit__(*exc)
