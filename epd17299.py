@@ -565,4 +565,5 @@ class Epd17299:
         self.S2.turn_on()
         logger.debug('Display is on')
 
-    def display(self,):
+    def display(self):
+        pass
