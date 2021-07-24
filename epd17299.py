@@ -168,7 +168,7 @@ class SPIBus:
 class SPITransaction:
     """Wrapper for a SPI transaction."""
 
-    CHUNK_SIZE = 600 #(1<<16)-1
+    CHUNK_SIZE = 4096 #(1<<16)-1
 
     def __init__(self, pi, spi, dc, dcpol):
         """Create a new SPITransaction.
@@ -389,12 +389,12 @@ class Epd17299:
                 tx.write(0x61, command=True)
                 tx.write(struct.pack('>HH', self.width, self.height))
 
-                # DUPSI
+                # DUSPI
                 tx.write(0x15, command=True)
                 tx.write(0x20)
 
                 # PLL
-                tx.write(0x15, command=True)
+                tx.write(0x30, command=True)
                 tx.write(0x08)
 
                 # Vcom and data interval setting
@@ -422,7 +422,7 @@ class Epd17299:
                 self.send_lut()
 
         def __enter__(self):
-            self._dev = SPIBus(self.pi, speed=1000000,
+            self._dev = SPIBus(self.pi, speed=4000000,
                                bus=SPIPort.MAIN, busmode=SPIMode.MODE_0)
             self._dev.__enter__()
             self._init_display()
